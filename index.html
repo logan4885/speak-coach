@@ -104,6 +104,14 @@ nav.tabs button .i{font-size:20px;line-height:1.1}
 nav.tabs button.on{color:var(--pri);font-weight:600}
 .badge{position:absolute;top:4px;left:calc(50% + 6px);background:#e11d48;color:#fff;border-radius:999px;font-size:10px;min-width:16px;height:16px;line-height:16px;padding:0 4px}
 .toast{position:fixed;left:50%;bottom:calc(84px + var(--safeB));transform:translateX(-50%);background:rgba(31,35,48,.92);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:50;max-width:88vw;text-align:center}
+/* segmented + words */
+.seg{display:flex;background:#e9eaf3;border-radius:12px;padding:3px;margin:6px 0 10px}
+.seg button{flex:1;border:none;background:none;padding:8px;border-radius:10px;font-size:14px;font-weight:600;color:var(--sub);cursor:pointer}
+.seg button.on{background:#fff;color:var(--pri);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.word-big{font-size:30px;font-weight:800;letter-spacing:.3px}
+.wrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.wrow:last-child{border-bottom:none}
+.lv{font-size:11px;color:var(--okInk);white-space:nowrap}
 /* chat */
 .msgs{display:flex;flex-direction:column;gap:10px;margin:12px 0}
 .msg{max-width:86%;display:flex;flex-direction:column}
@@ -133,6 +141,28 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
 <main>
 <!-- ============ 练习 ============ -->
 <section class="view on" id="v-practice">
+  <div class="seg" id="modeSeg"><button data-m="free" class="on">🗣️ 自由说</button><button data-m="words">📚 单词造句</button></div>
+  <!-- 单词造句模式 -->
+  <div id="wordsMode" class="hidden">
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">导入新单词</h3><button class="link" id="toggleImport">收起</button></div>
+      <div id="importBox">
+        <div class="muted" style="margin:6px 0 10px">在百词斩里截图「今日新词」或「单词本」页面上传，AI 自动识别单词和意思。也可以直接粘贴单词。</div>
+        <button class="btn primary block" id="shotBtn">📷 上传百词斩截图（可多张）</button>
+        <input type="file" id="shotFile" accept="image/*" multiple class="hidden">
+        <textarea id="wordPaste" rows="2" placeholder="或者粘贴单词，比如：&#10;abandon&#10;reluctant 不情愿的" style="margin-top:10px"></textarea>
+        <button class="btn sm" id="pasteBtn" style="margin-top:8px">识别粘贴的单词</button>
+        <div id="importOut"></div>
+      </div>
+    </div>
+    <div id="wordCard"></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h3 style="margin:0">我的单词</h3><span class="muted" id="wordStat"></span></div>
+      <div id="wordList"></div>
+    </div>
+  </div>
+  <!-- 自由说模式 -->
+  <div id="freeMode">
   <div class="chips" id="cats"></div>
   <div class="card topic" id="topicCard">
     <div class="muted">今天的话题</div>
@@ -145,6 +175,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
   </div>
   <div class="card" id="mainInput"></div>
   <div id="result"></div>
+  </div>
 </section>
 
 <!-- ============ AI 对话 ============ -->
@@ -282,9 +313,10 @@ const S = {
   items: LS.get('items', []),   // 纠正过的句子（复习用）
   tags:  LS.get('tags', {}),    // 个人错误档案 {tag:{type,count,fixed,last,wrong,right,explain}}
   log:   LS.get('log', []),     // 练习记录 [{t,score}]
-  topics: LS.get('topics', [])
+  topics: LS.get('topics', []),
+  words: LS.get('words', [])    // 单词造句 [{w,ph,pos,mean,added,level,due,tries,passes,best}]
 };
-function save(){ for(const k of ['settings','items','tags','log','topics']) LS.set(k, S[k]); refreshBadges(); }
+function save(){ for(const k of ['settings','items','tags','log','topics','words']) LS.set(k, S[k]); refreshBadges(); }
 
 let toastT;
 function toast(msg, ms=2600){
@@ -349,10 +381,10 @@ function pcmToWav(bytes, rate){
 async function geminiTTS(text){
   const k = S.settings.voice + '|' + S.settings.ttsModel + '|' + text;
   if(ttsCache.has(k)) return ttsCache.get(k);
-  const data = await geminiRaw(S.settings.ttsModel, {
+  const data = await withFallback(S.settings.ttsModel, TTS_MODELS, model => geminiRaw(model, {
     contents:[{role:'user', parts:[{text}]}],
     generationConfig:{responseModalities:['AUDIO'], speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:S.settings.voice}}}}
-  }, 60000);
+  }, 60000));
   const part = (data.candidates?.[0]?.content?.parts || []).find(p => p.inlineData || p.inline_data);
   const inl = part && (part.inlineData || part.inline_data);
   if(!inl?.data) throw new Error('没有收到语音');
@@ -440,12 +472,40 @@ async function buildParts(input, label){
 /* =========================================================
    Gemini 调用
    ========================================================= */
+// 服务器忙（503/500/429）时：同一模型重试，再自动换备用模型
+const TEXT_MODELS = ['gemini-3.6-flash','gemini-3.5-flash-lite','gemini-3.8-flash'];
+const TTS_MODELS = ['gemini-3.8-flash-lite-tts','gemini-3.8-flash-tts'];
+const isBusy = e => [429,500,502,503,504].includes(e.status) && !e.quota;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let onBusy = m => toast(m, 2500); // 界面提示回调
+let retryFn = null;
+function errHTML(msg, fn){ retryFn = fn; return `<div class="verdict fail">${esc(msg)}${fn ? '<div style="margin-top:8px"><button class="btn sm primary" data-retry>🔄 重试</button></div>' : ''}</div>`; }
+document.addEventListener('click', e => { if(e.target.closest('[data-retry]') && retryFn && !busy){ const f = retryFn; retryFn = null; f(); } });
+async function withFallback(primary, list, fn){
+  const models = [primary, ...list.filter(m => m !== primary)];
+  let last;
+  for(let i = 0; i < models.length; i++){
+    for(let attempt = 0; attempt < (i === 0 ? 2 : 1); attempt++){
+      try{
+        const r = await fn(models[i]);
+        if(i > 0) toast(`${primary} 太忙，这次自动换用 ${models[i]}`);
+        return r;
+      }catch(e){
+        last = e;
+        if(!isBusy(e)) throw e;
+        onBusy && onBusy(`Gemini 服务器有点忙，正在${attempt === 0 && i === 0 ? '重试' : '换用 ' + (models[i+1] || models[i])}…`);
+        await sleep(attempt === 0 && i === 0 ? 1500 : 600);
+      }
+    }
+  }
+  throw new Error('Gemini 所有模型现在都很忙（Google 服务器高峰），请过一两分钟再试。你的话没有丢，点「重试」即可');
+}
 async function gemini({system, parts, schema, temperature=0.4}){
-  const data = await geminiRaw(S.settings.model, {
+  const data = await withFallback(S.settings.model, TEXT_MODELS, model => geminiRaw(model, {
     systemInstruction:{parts:[{text:system}]},
     contents:[{role:'user', parts}],
     generationConfig:{temperature, responseMimeType:'application/json', ...(schema ? {responseSchema:schema} : {})}
-  });
+  }));
   const cand = data.candidates?.[0];
   const text = (cand?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join('');
   if(!text) throw new Error('Gemini 没有返回内容' + (cand?.finishReason ? `（${cand.finishReason}）` : ''));
@@ -467,8 +527,10 @@ async function geminiRaw(model, body, timeout=90000){
   if(!res.ok){
     const m = data.error?.message || res.statusText;
     if(res.status === 400 && /API key/i.test(m)) throw new Error('API Key 无效，请到设置里检查');
-    if(res.status === 429) throw new Error('请求太频繁或额度用完了，稍等再试');
-    throw new Error(`Gemini 出错 (${res.status})：${m}`);
+    const err = new Error(res.status === 429 ? '请求太频繁或免费额度用完了，稍等再试' : `Gemini 出错 (${res.status})：${m}`);
+    err.status = res.status;
+    if(res.status === 429 && /quota|exceeded|billing/i.test(m) && !/high demand|overload/i.test(m)) err.quota = true;
+    throw err;
   }
   return data;
 }
@@ -597,7 +659,7 @@ async function handleFirst(input){
     recordAnalysis(cur);
     renderReport();
   }catch(e){
-    res.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`;
+    res.innerHTML = errHTML(e.message, () => handleFirst(input));
   }
   busy = false;
 }
@@ -653,7 +715,7 @@ async function handleRetry(input){
       ? `<button class="btn block" style="margin-top:10px" onclick="scrollTo({top:0,behavior:'smooth'})">再说一句新的 ↑</button>`
       : `<div class="muted" style="margin-top:6px">再试一次，或点上面模糊的答案偷看一下</div>`);
     if(c.passed) document.querySelectorAll('#reportBox .ans').forEach(a => a.classList.remove('blur'));
-  }catch(e){ out.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`; }
+  }catch(e){ out.innerHTML = errHTML(e.message, () => handleRetry(input)); }
   busy = false;
 }
 function verdictHTML(c){
@@ -781,6 +843,159 @@ $('#diagBtn').onclick = async () => {
 };
 
 /* =========================================================
+   单词造句：百词斩截图 → 提取单词 → 用这个词说一句话
+   ========================================================= */
+$('#modeSeg').onclick = e => {
+  const b = e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('on', x === b));
+  const w = b.dataset.m === 'words';
+  $('#wordsMode').classList.toggle('hidden', !w); $('#freeMode').classList.toggle('hidden', w);
+  LS.set('mode', b.dataset.m);
+  if(w) renderWords();
+};
+const SCHEMA_WORDS = {type:'OBJECT', properties:{words:{type:'ARRAY', items:{type:'OBJECT', properties:{
+  word:STR, phonetic:STR, pos:STR, meaning_zh:STR}, required:['word','phonetic','pos','meaning_zh']}}}, required:['words']};
+const SCHEMA_WCHECK = {type:'OBJECT', properties:{
+  understood:BOOL, transcript:STR, used_word:BOOL, used_correctly:BOOL, passed:BOOL, cue_zh:STR,
+  corrected:STR, natural:STR, points:SCHEMA_ANALYZE.properties.points, feedback:STR, example_en:STR, example_zh:STR},
+  required:['understood','transcript','used_word','used_correctly','passed','cue_zh','corrected','natural','points','feedback','example_en','example_zh']};
+
+// 压缩图片，减小上传体积
+function shrinkImage(file, max=1600){
+  return new Promise((ok, no) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas'); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = () => no(new Error('图片读取失败'));
+    img.src = url;
+  });
+}
+async function importWords(parts){
+  const out = $('#importOut'); busy = true;
+  out.innerHTML = loadingHTML('AI 正在识别单词…');
+  try{
+    const r = await gemini({schema:SCHEMA_WORDS, temperature:0.1,
+      system:`你从背单词 App（如百词斩）的截图或学生粘贴的文字中提取英语单词或词组。
+- 只提取学习目标的英语单词/词组，忽略界面文字、按钮、例句、广告、页码。
+- phonetic 是美式音标（如 /əˈbændən/），pos 是词性缩写（如 v. / adj. / n.），meaning_zh 是简短中文释义（最常用的 1-2 个意思）。
+- 截图里有中文释义就以截图为准；没有就自己补充。没有单词时返回空数组。`,
+      parts});
+    const have = new Set(S.words.map(w => w.w.toLowerCase()));
+    const now = Date.now(), fresh = [];
+    for(const x of r.words || []){
+      const w = String(x.word || '').trim(); if(!w || have.has(w.toLowerCase())) continue;
+      have.add(w.toLowerCase());
+      fresh.push({w, ph:x.phonetic, pos:x.pos, mean:x.meaning_zh, added:now, level:0, due:now, tries:0, passes:0});
+    }
+    S.words = fresh.concat(S.words); save();
+    const dup = (r.words || []).length - fresh.length;
+    out.innerHTML = fresh.length
+      ? `<div class="verdict pass">✅ 新增 ${fresh.length} 个单词${dup ? `（${dup} 个已经有了）` : ''}：${fresh.map(w => esc(w.w)).join('、')}</div>`
+      : `<div class="verdict fail">${(r.words || []).length ? '这些单词都已经在列表里了' : '没有识别到单词，换一张更清晰的截图试试'}</div>`;
+    curWord = null; $('#importBox').dataset.auto = '1'; renderWords();
+  }catch(e){ out.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`; }
+  busy = false;
+}
+$('#shotBtn').onclick = () => $('#shotFile').click();
+$('#shotFile').onchange = async e => {
+  const files = [...e.target.files].slice(0, 6); e.target.value = '';
+  if(!files.length || busy) return;
+  try{
+    const parts = [{text:'这是百词斩的截图，请提取里面的单词：'}];
+    for(const f of files) parts.push({inlineData:{mimeType:'image/jpeg', data: await shrinkImage(f)}});
+    await importWords(parts);
+  }catch(err){ toast(err.message); }
+};
+$('#pasteBtn').onclick = () => {
+  const t = $('#wordPaste').value.trim(); if(!t || busy) return;
+  $('#wordPaste').value = ''; importWords([{text:'学生粘贴的单词：\n' + t}]);
+};
+$('#toggleImport').onclick = () => {
+  const h = $('#importBox').classList.toggle('hidden'); $('#toggleImport').textContent = h ? '展开' : '收起';
+};
+
+let curWord = null;
+const dueWords = () => S.words.filter(w => w.due <= Date.now()).sort((a,b) => (a.level - b.level) || (a.due - b.due));
+function renderWords(){
+  const due = dueWords();
+  if(!curWord || !due.includes(curWord)) curWord = due[0] || null;
+  renderWordList();
+  if(S.words.length && $('#importBox').dataset.auto !== '1'){ $('#importBox').classList.add('hidden'); $('#toggleImport').textContent = '展开'; $('#importBox').dataset.auto = '1'; }
+  const card = $('#wordCard');
+  if(!S.words.length){ card.innerHTML = ''; }
+  else if(!curWord){ card.innerHTML = `<div class="card"><div class="verdict pass">今天的单词都练完了 🎉 再去百词斩学几个新词，截图导入吧。</div></div>`; }
+  else{
+    const w = curWord;
+    card.innerHTML = `<div class="flow retry">
+      <div class="row" style="justify-content:space-between"><span class="muted">${w.level ? '复习' : '新词'} · 还剩 ${due.length} 个</span><button class="link" id="skipWord">换一个</button></div>
+      <div class="row" style="margin-top:6px"><span class="word-big">${esc(w.w)}</span><button class="say" data-say="${esc(w.w)}">🔊</button></div>
+      <div class="muted">${esc(w.ph || '')} ${esc(w.pos || '')}</div>
+      <div style="font-size:16px;margin-top:4px">${esc(w.mean || '')}</div>
+      <div class="pt" style="margin-top:10px">🎯 用 <b>${esc(w.w)}</b> 说一句和<b>你自己</b>有关的英语句子（越真实越好记）</div>
+      ${w.best ? `<div class="muted">上次你说过：${esc(w.best)}</div>` : ''}
+      <div id="wordMic"></div><div id="wordOut"></div>
+    </div>`;
+    mountInput($('#wordMic'), handleWordSentence, {small:true, hint:'点一下说出你的句子'});
+    $('#skipWord').onclick = () => { const d = dueWords(); curWord = d[(d.indexOf(w) + 1) % d.length]; renderWords(); };
+  }
+
+}
+function renderWordList(){
+  const due = dueWords();
+  $('#wordStat').textContent = S.words.length ? `${S.words.length} 个 · 待练 ${due.length} · 掌握 ${S.words.filter(w => w.level >= 3).length}` : '';
+  $('#wordList').innerHTML = S.words.slice(0, 300).map(w => `<div class="wrow">
+    <div><b>${esc(w.w)}</b> <span class="muted">${esc(w.pos || '')} ${esc(w.mean || '')}</span>${w.best ? `<div class="muted" style="font-size:12px">“${esc(w.best)}”</div>` : ''}</div>
+    <div style="text-align:right"><div class="lv">${'●'.repeat(w.level)}${'○'.repeat(INTERVALS.length - 1 - w.level)}</div><button class="link" data-wdel="${esc(w.w)}" style="color:var(--sub);padding:2px">删除</button></div>
+  </div>`).join('') || '<div class="muted">还没有单词，先上传一张百词斩截图吧</div>';
+}
+$('#wordList').onclick = e => {
+  const b = e.target.closest('[data-wdel]'); if(!b) return;
+  S.words = S.words.filter(w => w.w !== b.dataset.wdel); save(); renderWords();
+};
+async function handleWordSentence(input){
+  const w = curWord, out = $('#wordOut'); if(!w) return;
+  busy = true; out.innerHTML = loadingHTML('正在检查你的句子…');
+  try{
+    const r = await gemini({schema:SCHEMA_WCHECK, temperature:0.3, parts: await buildParts(input, '学生造的句子'),
+      system:`你是英语口语教练。学生正在用新学的单词造句来记忆它。
+目标单词：${w.w}（${w.pos || ''} ${w.mean || ''}）。学生水平：${LEVEL_NAME[S.settings.level]}。
+输出 JSON：
+- understood：听不清或没有英语时为 false。
+- transcript：逐字转写学生的句子，不要改。
+- used_word：句子里是否用了目标单词（允许时态/单复数等变形）。
+- used_correctly：目标单词的意思、搭配、词性用得是否正确。
+- passed：used_word 且 used_correctly 且句子没有严重语法错误。小错误不影响通过，但要在 points 里指出。
+- cue_zh：学生这句话的中文意思。
+- corrected：最小改动的正确句子；natural：母语者更自然的说法（必须保留目标单词）。
+- points：0-3 个知识点（type 取 grammar/vocabulary/natural/pronunciation；tag 是简短可复用的中文错误类别≤12字；wrong/right 是片段；explain 中文≤40字）。单词用法错误时 tag 用“${w.w} 的用法”。
+- feedback：中文点评≤60字。先肯定，再指出最关键的问题；通过时可以夸具体好在哪里。
+- example_en：一个地道、贴近生活的例句，展示这个单词最常见的用法；example_zh 是翻译。`});
+    if(!r.understood || !r.transcript){ out.innerHTML = `<div class="verdict fail">没听清，再说一次吧～</div>`; busy = false; return; }
+    r.points = (r.points || []).filter(p => p.tag);
+    const now = Date.now();
+    w.tries++; w.last = now;
+    if(r.passed){ w.passes++; w.level = Math.min(w.level + 1, INTERVALS.length - 1); w.due = now + INTERVALS[w.level] * DAY; w.best = r.natural || r.transcript; }
+    else{ w.level = Math.max(0, w.level - 1); w.due = now; }
+    recordAnalysis({id:now.toString(36), transcript:r.transcript, cue_zh:r.cue_zh, corrected:r.corrected, natural:r.natural, points:r.points, chat:true});
+    out.innerHTML = `<div class="verdict ${r.passed ? 'pass' : 'fail'}">
+        <div><b>${r.passed ? '✅ 用对了！' : !r.used_word ? '❌ 句子里没有用到这个词' : '❌ 再试一次'}</b></div>
+        <div style="margin:4px 0;color:var(--ink)">你说的：${esc(r.transcript)}</div>
+        <div>${esc(r.feedback)}</div></div>
+      ${norm(r.natural) !== norm(r.transcript) ? `<div style="margin-top:8px">${sentRow('更地道', r.natural)}</div>` : ''}
+      ${r.points.length ? pointsHTML(r.points) : ''}
+      <div class="pt"><div class="muted">📖 地道例句</div>${sentRow('例句', r.example_en)}<div class="muted" style="margin-left:60px">${esc(r.example_zh)}</div></div>
+      <button class="btn ${r.passed ? 'primary' : ''} block" id="nextWord" style="margin-top:8px">${r.passed ? '下一个单词 →' : '先跳过，稍后再练'}</button>`;
+    $('#nextWord').onclick = () => { if(!r.passed){ const d = dueWords(); curWord = d[(d.indexOf(w) + 1) % d.length] || null; } else curWord = null; renderWords(); scrollTo({top:0, behavior:'smooth'}); };
+    save(); renderWordList();
+  }catch(e){ out.innerHTML = errHTML(e.message, () => handleWordSentence(input)); }
+  busy = false;
+}
+
+/* =========================================================
    AI 对话：你说 → AI 语音回答，同时后台纠错
    ========================================================= */
 const SCENES = [
@@ -892,6 +1107,7 @@ async function handleChatTurn(input){
   Chat.turns.push({role:'me', pending:true}); renderChat(); scrollChatEnd();
   chatStatus('<span class="dots">AI 正在听你说的话并思考回答</span>');
   const me = Chat.turns[Chat.turns.length - 1];
+  const prevBusy = onBusy; onBusy = m => chatStatus(`<span class="dots">${esc(m)}</span>`);
   try{
     const parts = await buildParts(input, '学生这轮说');
     parts.unshift({text:`到目前为止的对话：\n${hist}\n`});
@@ -912,8 +1128,9 @@ async function handleChatTurn(input){
     await aiSay(Chat.turns[Chat.turns.length - 1].en);
   }catch(e){
     Chat.turns.pop(); renderChat();
-    chatStatus(`<span style="color:var(--badInk)">${esc(e.message)}</span>`);
+    chatStatus(errHTML(e.message, () => handleChatTurn(input)));
   }
+  onBusy = prevBusy;
   busy = false;
 }
 $('#chatStart').onclick = startChat;
@@ -980,7 +1197,7 @@ $('#testSet').onclick = async () => {
 for(const [id,k] of [['setLevel','level'],['setAccent','accent']]) $('#'+id).onchange = e => { S.settings[k] = e.target.value; save(); };
 $('#setRate').oninput = e => { S.settings.rate = +e.target.value; $('#rateV').textContent = e.target.value + 'x'; save(); };
 $('#expBtn').onclick = () => {
-  const data = JSON.stringify({v:1, items:S.items, tags:S.tags, log:S.log}, null, 1);
+  const data = JSON.stringify({v:1, items:S.items, tags:S.tags, log:S.log, words:S.words}, null, 1);
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
   a.download = `口语教练备份-${new Date().toISOString().slice(0,10)}.json`; a.click();
 };
@@ -989,13 +1206,13 @@ $('#impFile').onchange = async e => {
   try{
     const d = JSON.parse(await e.target.files[0].text());
     if(!Array.isArray(d.items)) throw 0;
-    S.items = d.items; S.tags = d.tags || {}; S.log = d.log || []; save(); renderHeader(); toast('导入成功');
+    S.items = d.items; S.tags = d.tags || {}; S.log = d.log || []; S.words = d.words || S.words; save(); renderHeader(); toast('导入成功');
   }catch(err){ toast('文件格式不对'); }
   e.target.value = '';
 };
 $('#clrBtn').onclick = () => {
   if(!confirm('确定清空所有练习记录和错误档案？（API Key 会保留）此操作无法撤销。')) return;
-  S.items = []; S.tags = {}; S.log = []; save(); renderHeader(); toast('已清空');
+  S.items = []; S.tags = {}; S.log = []; S.words = []; save(); renderHeader(); toast('已清空');
 };
 
 /* =========================================================
@@ -1021,6 +1238,7 @@ function renderHeader(){
 
 renderCats(); renderTopic(); renderHeader(); refreshBadges();
 mountInput($('#mainInput'), handleFirst);
+if(LS.get('mode','free') === 'words') document.querySelector('#modeSeg [data-m=words]').click();
 mountInput($('#chatInput'), handleChatTurn, {small:true, hint:'点一下说英语，说完再点一下'});
 if(!S.settings.key){ switchView('settings'); setTimeout(() => toast('第一次使用：先填 Gemini API Key 吧', 4000), 300); }
 if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
