@@ -243,6 +243,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
       <option value="gemini-3.6-flash">gemini-3.6-flash（推荐，均衡）</option>
       <option value="gemini-3.8-flash">gemini-3.8-flash（最聪明，稍慢）</option>
       <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（最快最省）</option>
+      <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite（备用，省额度）</option>
       <option value="custom">自定义…</option>
     </select>
     <input type="text" id="setModelCustom" class="hidden" placeholder="输入模型 ID" style="margin-top:8px">
@@ -473,31 +474,42 @@ async function buildParts(input, label){
    Gemini 调用
    ========================================================= */
 // 服务器忙（503/500/429）时：同一模型重试，再自动换备用模型
-const TEXT_MODELS = ['gemini-3.6-flash','gemini-3.5-flash-lite','gemini-3.8-flash'];
+const TEXT_MODELS = ['gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.6-flash','gemini-3.1-flash-lite'];
 const TTS_MODELS = ['gemini-3.8-flash-lite-tts','gemini-3.8-flash-tts'];
-const isBusy = e => [429,500,502,503,504].includes(e.status) && !e.quota;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let onBusy = m => toast(m, 2500); // 界面提示回调
 let retryFn = null;
 function errHTML(msg, fn){ retryFn = fn; return `<div class="verdict fail">${esc(msg)}${fn ? '<div style="margin-top:8px"><button class="btn sm primary" data-retry>🔄 重试</button></div>' : ''}</div>`; }
 document.addEventListener('click', e => { if(e.target.closest('[data-retry]') && retryFn && !busy){ const f = retryFn; retryFn = null; f(); } });
+// 额度用完的模型：记下来，一段时间内跳过（每个模型的免费额度是分开算的）
+const spent = LS.get('spent', {});
+const isSpent = m => spent[m] && Date.now() - spent[m] < 3 * 3600e3;
+function markSpent(m){ spent[m] = Date.now(); LS.set('spent', spent); }
 async function withFallback(primary, list, fn){
-  const models = [primary, ...list.filter(m => m !== primary)];
+  const all = [primary, ...list.filter(m => m !== primary)];
+  let models = all.filter(m => !isSpent(m));
+  if(!models.length) models = all; // 全都标记过了，就都再试一次
   let last;
   for(let i = 0; i < models.length; i++){
-    for(let attempt = 0; attempt < (i === 0 ? 2 : 1); attempt++){
+    for(let attempt = 0; attempt < 2; attempt++){
       try{
         const r = await fn(models[i]);
-        if(i > 0) toast(`${primary} 太忙，这次自动换用 ${models[i]}`);
+        if(models[i] !== primary) toast(`${primary} ${isSpent(primary) ? '今天额度用完了' : '太忙'}，自动换用 ${models[i]}`, 3000);
+        if(spent[models[i]]){ delete spent[models[i]]; LS.set('spent', spent); }
         return r;
       }catch(e){
         last = e;
-        if(!isBusy(e)) throw e;
-        onBusy && onBusy(`Gemini 服务器有点忙，正在${attempt === 0 && i === 0 ? '重试' : '换用 ' + (models[i+1] || models[i])}…`);
-        await sleep(attempt === 0 && i === 0 ? 1500 : 600);
+        if(e.status === 429){
+          if(e.quota || attempt === 1){ markSpent(models[i]); }
+          else { onBusy && onBusy('请求有点快，稍等一下再试…'); await sleep(4000); continue; }
+        }else if(![500,502,503,504].includes(e.status)) throw e;
+        else if(attempt === 0 && i === 0){ onBusy && onBusy('Gemini 服务器有点忙，正在重试…'); await sleep(1500); continue; }
+        if(models[i+1]) onBusy && onBusy(`换用 ${models[i+1]}…`);
+        break;
       }
     }
   }
+  if(last && last.status === 429) throw new Error(`所有可用模型的免费额度都暂时用完了（Google 原话：${last.raw || ''}）。免费额度每天会重置；想不受限制可以在 Google AI Studio 绑定付费账户。`);
   throw new Error('Gemini 所有模型现在都很忙（Google 服务器高峰），请过一两分钟再试。你的话没有丢，点「重试」即可');
 }
 async function gemini({system, parts, schema, temperature=0.4}){
@@ -528,8 +540,8 @@ async function geminiRaw(model, body, timeout=90000){
     const m = data.error?.message || res.statusText;
     if(res.status === 400 && /API key/i.test(m)) throw new Error('API Key 无效，请到设置里检查');
     const err = new Error(res.status === 429 ? '请求太频繁或免费额度用完了，稍等再试' : `Gemini 出错 (${res.status})：${m}`);
-    err.status = res.status;
-    if(res.status === 429 && /quota|exceeded|billing/i.test(m) && !/high demand|overload/i.test(m)) err.quota = true;
+    err.status = res.status; err.raw = m;
+    if(res.status === 429 && /quota|exceeded|billing|per day|limit/i.test(m) && !/high demand|overload/i.test(m)) err.quota = true;
     throw err;
   }
   return data;
@@ -1165,7 +1177,7 @@ $('#tryVoice').onclick = async () => {
   try{ await speak("Hi! I'm your English speaking partner. What would you like to talk about today?"); }
   finally{ b.disabled = false; b.textContent = '试听'; }
 };
-const PRESET = ['gemini-3.6-flash','gemini-3.8-flash','gemini-3.5-flash-lite'];
+const PRESET = ['gemini-3.6-flash','gemini-3.8-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
 function renderSettings(){
   const s = S.settings;
   $('#setKey').value = s.key; $('#setBase').value = s.base;
