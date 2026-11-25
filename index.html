@@ -234,6 +234,31 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
 <!-- ============ 设置 ============ -->
 <section class="view" id="v-settings">
   <div class="card">
+    <h3>AI 服务商</h3>
+    <select id="setProvider">
+      <option value="gemini">Google Gemini</option>
+      <option value="qwen">通义千问（阿里云百炼，国内大模型）</option>
+    </select>
+  </div>
+  <div class="card hidden" id="qwenBox">
+    <h3>通义千问（阿里云百炼）</h3>
+    <label class="f">API Key（sk- 开头，只保存在这台手机里）</label>
+    <div class="row" style="flex-wrap:nowrap"><input type="password" id="setQwenKey" placeholder="sk-..." autocomplete="off"><button class="btn sm" id="toggleQwenKey">显示</button></div>
+    <div class="muted" style="margin-top:6px">在 <a href="https://bailian.console.aliyun.com/?tab=model#/api-key" target="_blank" rel="noopener">阿里云百炼控制台</a> 创建（需阿里云账号，可用支付宝付费）</div>
+    <label class="f">Base URL（在百炼控制台「API Key」页面复制「按量付费 Base URL」）</label>
+    <input type="text" id="setQwenBase" placeholder="https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" autocomplete="off">
+    <div class="muted" style="margin-top:6px">sk-ws- 开头的 Key 必须填它自己业务空间的地址（ws- 开头），否则会提示「没有开通模型」</div>
+<label class="f">纠错 / 对话模型</label>
+    <select id="setQwenModel">
+      <option value="qwen3.8-omni-flash">qwen3.8-omni-flash（推荐：能直接听录音）</option>
+    </select>
+    <label class="f">AI 语音音色（qwen3.5-omni-flash 生成）</label>
+    <select id="setQwenVoice">
+      <option value="Tina">Tina</option><option value="Cherry">Cherry</option><option value="Ethan">Ethan</option><option value="Serena">Serena</option><option value="Chelsie">Chelsie</option>
+    </select>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="saveQwen">保存</button><button class="btn" id="testQwen">测试连接</button><button class="btn" id="tryQwenVoice">试听</button></div>
+  </div>
+  <div class="card" id="gemBox">
     <h3>Gemini API</h3>
     <label class="f">API Key（只保存在这台手机的浏览器里）</label>
     <div class="row" style="flex-wrap:nowrap"><input type="password" id="setKey" placeholder="AIza..." autocomplete="off"><button class="btn sm" id="toggleKey">显示</button></div>
@@ -254,7 +279,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
   <div class="card">
     <h3>AI 语音</h3>
     <label class="f">语音引擎</label>
-    <select id="setEngine"><option value="gemini">Gemini 真人感语音（推荐）</option><option value="browser">手机自带语音（免费、离线）</option></select>
+    <select id="setEngine"><option value="gemini">AI 真人感语音（推荐，用当前服务商）</option><option value="browser">手机自带语音（免费、离线）</option></select>
     <div id="geminiVoiceBox">
       <label class="f">音色</label>
       <div class="row" style="flex-wrap:nowrap"><select id="setVoice"></select><button class="btn sm" id="tryVoice">试听</button></div>
@@ -310,7 +335,7 @@ const LS = {
 const DAY = 86400000;
 const S = {
   settings: Object.assign({key:'', model:'gemini-3.6-flash', base:'', level:'intermediate', accent:'en-US', rate:0.95,
-    engine:'gemini', voice:'Kore', ttsModel:'gemini-3.8-flash-lite-tts', autoplay:true, hideText:false}, LS.get('settings', {})),
+    engine:'gemini', voice:'Kore', provider:'gemini', qwenKey:'', qwenBase:'', qwenModel:'qwen3.8-omni-flash', qwenVoice:'Tina', ttsModel:'gemini-3.8-flash-lite-tts', autoplay:true, hideText:false}, LS.get('settings', {})),
   items: LS.get('items', []),   // 纠正过的句子（复习用）
   tags:  LS.get('tags', {}),    // 个人错误档案 {tag:{type,count,fixed,last,wrong,right,explain}}
   log:   LS.get('log', []),     // 练习记录 [{t,score}]
@@ -400,10 +425,10 @@ async function geminiTTS(text){
 let ttsWarned = false;
 async function speak(text){
   Player.stop();
-  if(S.settings.engine === 'gemini' && S.settings.key){
-    try{ await Player.play(await geminiTTS(text)); return; }
+  if(S.settings.engine === 'gemini' && activeKey()){
+    try{ await Player.play(await (S.settings.provider === 'qwen' ? qwenTTS(text) : geminiTTS(text))); return; }
     catch(e){
-      if(!ttsWarned){ toast('Gemini 语音暂时不可用，改用手机自带语音：' + e.message, 4500); ttsWarned = true; }
+      if(!ttsWarned){ toast('AI 语音暂时不可用，改用手机自带语音：' + e.message, 4500); ttsWarned = true; }
     }
   }
   await browserSpeak(text);
@@ -513,6 +538,7 @@ async function withFallback(primary, list, fn){
   throw new Error('Gemini 所有模型现在都很忙（Google 服务器高峰），请过一两分钟再试。你的话没有丢，点「重试」即可');
 }
 async function gemini({system, parts, schema, temperature=0.4}){
+  if(S.settings.provider === 'qwen') return fillDefaults(schema, await qwenJSON({system, parts, schema, temperature}));
   const data = await withFallback(S.settings.model, TEXT_MODELS, model => geminiRaw(model, {
     systemInstruction:{parts:[{text:system}]},
     contents:[{role:'user', parts}],
@@ -521,8 +547,126 @@ async function gemini({system, parts, schema, temperature=0.4}){
   const cand = data.candidates?.[0];
   const text = (cand?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join('');
   if(!text) throw new Error('Gemini 没有返回内容' + (cand?.finishReason ? `（${cand.finishReason}）` : ''));
-  try{ return JSON.parse(text); }catch(e){ const m = text.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('结果解析失败，请重试'); }
+  return fillDefaults(schema, parseJSONText(text));
 }
+function parseJSONText(text){
+  try{ return JSON.parse(text); }catch(e){ const m = String(text).match(/\{[\s\S]*\}/); if(m){ try{ return JSON.parse(m[0]); }catch(e2){} } throw new Error('结果解析失败，请重试'); }
+}
+// 模型漏掉字段时补默认值，防止界面出错
+function fillDefaults(schema, obj){
+  if(!schema || obj == null) return obj;
+  const t = String(schema.type).toUpperCase();
+  if(t === 'OBJECT'){
+    if(typeof obj !== 'object' || Array.isArray(obj)) obj = {};
+    for(const [k, sub] of Object.entries(schema.properties || {})){
+      const st = String(sub.type).toUpperCase();
+      if(obj[k] === undefined || obj[k] === null) obj[k] = st === 'ARRAY' ? [] : st === 'BOOLEAN' ? false : st === 'INTEGER' ? 0 : st === 'OBJECT' ? {} : '';
+      else obj[k] = fillDefaults(sub, obj[k]);
+    }
+    return obj;
+  }
+  if(t === 'ARRAY') return Array.isArray(obj) ? obj.map(x => fillDefaults(schema.items, x)) : [];
+  if(t === 'BOOLEAN') return obj === true || obj === 'true';
+  if(t === 'INTEGER') return Math.round(+obj) || 0;
+  if(t === 'STRING') return typeof obj === 'string' ? obj : String(obj);
+  return obj;
+}
+// 把 schema 变成给模型看的字段说明
+function schemaHint(sc){
+  const t = String(sc.type).toUpperCase();
+  if(t === 'OBJECT') return '{' + Object.entries(sc.properties || {}).map(([k, v]) => `"${k}": ${schemaHint(v)}`).join(', ') + '}';
+  if(t === 'ARRAY') return '[' + schemaHint(sc.items) + ', ...]';
+  if(sc.enum) return '"' + sc.enum.join('|') + '"';
+  return {STRING:'"字符串"', BOOLEAN:'true/false', INTEGER:'整数'}[t] || '"..."';
+}
+
+/* ---------- 通义千问（阿里云百炼，OpenAI 兼容接口） ---------- */
+function qwenParts(parts){
+  return parts.map(p => {
+    if(p.text != null) return {type:'text', text:p.text};
+    const d = p.inlineData; if(!d) return null;
+    const mt = (d.mimeType || '').toLowerCase();
+    if(mt.startsWith('image/')) return {type:'image_url', image_url:{url:`data:${mt};base64,${d.data}`}};
+    const fmt = /wav/.test(mt) ? 'wav' : /mpeg|mp3/.test(mt) ? 'mp3' : /aac|mp4|m4a/.test(mt) ? 'aac' : 'wav';
+    return {type:'input_audio', input_audio:{data:`data:${mt || 'audio/wav'};base64,${d.data}`, format:fmt}};
+  }).filter(Boolean);
+}
+async function qwenFetch(body, timeout=90000){
+  const {qwenKey, qwenBase} = S.settings;
+  if(!qwenKey){ switchView('settings'); throw new Error('请先在「设置」里填写通义千问 API Key'); }
+  if(!qwenBase){ switchView('settings'); throw new Error('请在「设置」里填写通义千问的 Base URL（百炼控制台 API Key 页面可以复制）'); }
+  const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), timeout);
+  let res;
+  try{
+    res = await fetch(`${(qwenBase || '').replace(/\/+$/,'')}/chat/completions`, {method:'POST',
+      headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + qwenKey}, body:JSON.stringify(body), signal:ctrl.signal});
+  }catch(e){
+    clearTimeout(to);
+    throw new Error(e.name === 'AbortError' ? '请求超时，请检查网络后重试' : '连不上通义千问，请检查网络');
+  }
+  if(!res.ok){
+    clearTimeout(to);
+    const data = await res.json().catch(() => ({}));
+    const m = data.error?.message || data.message || res.statusText;
+    const err = new Error(/Unpurchased/.test(m) ? '阿里云提示「没有开通模型」：请检查 Base URL 是不是你业务空间的专属地址，以及账户余额是否大于 0'
+      : res.status === 401 ? '通义千问 API Key 无效，或者和所选地域不一致（北京/新加坡的 Key 不通用）'
+      : res.status === 429 ? '通义千问请求太频繁或额度不足：' + m
+      : /Arrearage|overdue|欠费/i.test(m) ? '阿里云账户欠费或免费额度用完了，请到阿里云充值' : `通义千问出错 (${res.status})：${m}`);
+    err.status = res.status; err.raw = m;
+    throw err;
+  }
+  return {res, done:() => clearTimeout(to)};
+}
+async function qwenJSON({system, parts, schema, temperature}){
+  return withFallback(S.settings.qwenModel, [], async model => {
+    const {res, done} = await qwenFetch({
+      model, temperature, stream:false, enable_thinking:false,
+      response_format:{type:'json_object'},
+      messages:[
+        {role:'system', content: system + (schema ? `\n\n只输出一个 JSON 对象，不要输出任何其他文字。JSON 结构如下：\n${schemaHint(schema)}` : '')},
+        {role:'user', content: qwenParts(parts)}
+      ]
+    });
+    const data = await res.json(); done();
+    const text = data.choices?.[0]?.message?.content;
+    if(!text) throw new Error('通义千问没有返回内容');
+    return parseJSONText(Array.isArray(text) ? text.map(x => x.text || '').join('') : text);
+  });
+}
+async function qwenTTS(text){
+  const k = 'qwen|' + S.settings.qwenVoice + '|' + text;
+  if(ttsCache.has(k)) return ttsCache.get(k);
+  const {res, done} = await qwenFetch({
+    model:'qwen3.5-omni-flash', stream:true, modalities:['text','audio'],
+    audio:{voice:S.settings.qwenVoice || 'Tina', format:'wav'},
+    messages:[
+      {role:'system', content:'You are a text-to-speech reader. Read the user\'s English text aloud exactly as written, word for word, in a natural, friendly voice. Do not add, remove or change any words.'},
+      {role:'user', content:text}
+    ]
+  }, 60000);
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '', b64 = '';
+  for(;;){
+    const {value, done:end} = await reader.read(); if(end) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split('\n'); buf = lines.pop();
+    for(const line of lines){
+      const t = line.trim(); if(!t.startsWith('data:')) continue;
+      const payload = t.slice(5).trim(); if(payload === '[DONE]') continue;
+      try{ const a = JSON.parse(payload).choices?.[0]?.delta?.audio; if(a?.data) b64 += a.data; }catch(e){}
+    }
+  }
+  done();
+  if(!b64) throw new Error('没有收到语音');
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  const isWav = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+  const out = isWav ? bytes.buffer : pcmToWav(bytes, 24000);
+  ttsCache.set(k, out); if(ttsCache.size > 60) ttsCache.delete(ttsCache.keys().next().value);
+  return out;
+}
+const activeKey = () => S.settings.provider === 'qwen' ? S.settings.qwenKey : S.settings.key;
+
 async function geminiRaw(model, body, timeout=90000){
   const {key} = S.settings;
   if(!key){ switchView('settings'); throw new Error('请先在「设置」里填写 Gemini API Key'); }
@@ -1166,7 +1310,7 @@ $('#chatEnd').onclick = () => {
    ========================================================= */
 const VOICES = [['Kore','沉稳'],['Puck','轻快'],['Zephyr','明亮'],['Aoede','轻松'],['Charon','知性'],['Leda','年轻'],['Fenrir','活泼'],['Orus','坚定'],['Achird','友好'],['Sulafat','温暖']];
 $('#setVoice').innerHTML = VOICES.map(([v,d]) => `<option value="${v}">${v}（${d}）</option>`).join('');
-$('#setEngine').onchange = e => { S.settings.engine = e.target.value; $('#geminiVoiceBox').classList.toggle('hidden', e.target.value !== 'gemini'); save(); };
+$('#setEngine').onchange = e => { S.settings.engine = e.target.value; save(); showProvider(); };
 $('#setVoice').onchange = e => { S.settings.voice = e.target.value; save(); };
 $('#setTtsModel').onchange = e => { S.settings.ttsModel = e.target.value; save(); };
 $('#setAutoplay').onchange = e => { S.settings.autoplay = e.target.checked; save(); };
@@ -1184,11 +1328,41 @@ function renderSettings(){
   const isPreset = PRESET.includes(s.model);
   $('#setModel').value = isPreset ? s.model : 'custom';
   $('#setModelCustom').classList.toggle('hidden', isPreset); $('#setModelCustom').value = isPreset ? '' : s.model;
-  $('#setEngine').value = s.engine; $('#geminiVoiceBox').classList.toggle('hidden', s.engine !== 'gemini');
+  $('#setProvider').value = s.provider; showProvider();
+  $('#setQwenKey').value = s.qwenKey; $('#setQwenBase').value = s.qwenBase; $('#setQwenModel').value = s.qwenModel; $('#setQwenVoice').value = s.qwenVoice;
+  $('#setEngine').value = s.engine; showProvider();
   $('#setVoice').value = s.voice; $('#setTtsModel').value = s.ttsModel;
   $('#setAutoplay').checked = !!s.autoplay; $('#setHideText').checked = !!s.hideText;
   $('#setLevel').value = s.level; $('#setAccent').value = s.accent; $('#setRate').value = s.rate; $('#rateV').textContent = s.rate + 'x';
 }
+function showProvider(){
+  const q = S.settings.provider === 'qwen';
+  $('#qwenBox').classList.toggle('hidden', !q); $('#gemBox').classList.toggle('hidden', q);
+  $('#geminiVoiceBox').classList.toggle('hidden', q || S.settings.engine !== 'gemini');
+}
+$('#setProvider').onchange = e => { S.settings.provider = e.target.value; save(); showProvider(); ttsWarned = false; };
+function collectQwen(){
+  Object.assign(S.settings, {qwenKey:$('#setQwenKey').value.trim(), qwenBase:$('#setQwenBase').value.trim().replace(/\/chat\/completions\/?$/,'').replace(/\/+$/,''),
+    qwenModel:$('#setQwenModel').value, qwenVoice:$('#setQwenVoice').value});
+  save();
+}
+$('#toggleQwenKey').onclick = () => { const k = $('#setQwenKey'); k.type = k.type === 'password' ? 'text' : 'password'; $('#toggleQwenKey').textContent = k.type === 'password' ? '显示' : '隐藏'; };
+$('#saveQwen').onclick = () => { collectQwen(); toast('已保存 ✓'); };
+$('#setQwenVoice').onchange = () => collectQwen();
+$('#testQwen').onclick = async () => {
+  collectQwen(); const b = $('#testQwen'); b.disabled = true; b.textContent = '测试中…';
+  try{
+    const r = await gemini({schema:{type:'OBJECT', properties:{reply:STR}, required:['reply']}, system:'Reply in JSON.', parts:[{text:'Say "OK" in the reply field.'}]});
+    toast(`✅ 连接成功（${S.settings.qwenModel}）：${r.reply}`);
+  }catch(e){ toast(e.message, 6000); }
+  b.disabled = false; b.textContent = '测试连接';
+};
+$('#tryQwenVoice').onclick = async () => {
+  collectQwen(); ttsWarned = false;
+  const b = $('#tryQwenVoice'); b.disabled = true; b.textContent = '生成中…';
+  try{ await speak("Hi! I'm your English speaking partner. What would you like to talk about today?"); }
+  finally{ b.disabled = false; b.textContent = '试听'; }
+};
 $('#setModel').onchange = e => $('#setModelCustom').classList.toggle('hidden', e.target.value !== 'custom');
 $('#toggleKey').onclick = () => { const k = $('#setKey'); k.type = k.type === 'password' ? 'text' : 'password'; $('#toggleKey').textContent = k.type === 'password' ? '显示' : '隐藏'; };
 function collectSettings(){
@@ -1252,7 +1426,7 @@ renderCats(); renderTopic(); renderHeader(); refreshBadges();
 mountInput($('#mainInput'), handleFirst);
 if(LS.get('mode','free') === 'words') document.querySelector('#modeSeg [data-m=words]').click();
 mountInput($('#chatInput'), handleChatTurn, {small:true, hint:'点一下说英语，说完再点一下'});
-if(!S.settings.key){ switchView('settings'); setTimeout(() => toast('第一次使用：先填 Gemini API Key 吧', 4000), 300); }
+if(!activeKey()){ switchView('settings'); setTimeout(() => toast('第一次使用：先选 AI 服务商并填 API Key 吧', 4000), 300); }
 if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>

@@ -1,5 +1,5 @@
 // 离线缓存应用外壳；Gemini 请求永远走网络
-const CACHE = 'speak-coach-v5';
+const CACHE = 'speak-coach-v7';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
