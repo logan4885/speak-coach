@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="口语教练">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>口语教练 · Speak Coach</title>
+<style>
+:root{
+  --bg:#f6f7fb; --card:#fff; --ink:#1f2330; --sub:#6b7280; --line:#e7e8ef;
+  --pri:#4f46e5; --pri2:#eef0ff; --ana:#f3f0fd; --ok:#e8f7f0; --okInk:#0f7a4f;
+  --warm:#fdf6ea; --warmInk:#9a5b00; --bad:#fdecec; --badInk:#b42318;
+  --r:16px; --safeB:env(safe-area-inset-bottom,0px); --safeT:env(safe-area-inset-top,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",Roboto,sans-serif}
+body{padding-top:var(--safeT);padding-bottom:calc(68px + var(--safeB))}
+header.top{position:sticky;top:0;z-index:5;background:rgba(246,247,251,.92);backdrop-filter:blur(10px);padding:12px 18px 8px;display:flex;align-items:center;justify-content:space-between}
+header.top h1{font-size:19px;margin:0}
+header.top .streak{font-size:13px;color:var(--sub)}
+main{max-width:560px;margin:0 auto;padding:4px 14px 20px}
+.view{display:none}.view.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin:12px 0}
+.card h3{margin:0 0 8px;font-size:15px}
+.muted{color:var(--sub);font-size:13px}
+.hidden{display:none!important}
+.btn{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:12px;padding:10px 14px;font-size:15px;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.sm{padding:7px 11px;font-size:13px;border-radius:10px}
+.btn.block{width:100%}
+.btn:disabled{opacity:.5}
+.link{background:none;border:none;color:var(--pri);font-size:13px;padding:6px;cursor:pointer}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--pri2);border-color:var(--pri);color:var(--pri);font-weight:600}
+.tag{display:inline-block;background:var(--pri2);color:var(--pri);border-radius:8px;padding:2px 8px;font-size:12px;margin:2px 4px 2px 0}
+.topic{background:linear-gradient(135deg,#eef0ff,#f6f0ff);border:none}
+.topic .q{font-size:17px;font-weight:650;margin:6px 0 2px}
+/* mic */
+.mic-wrap{display:flex;flex-direction:column;align-items:center;padding:8px 0 2px}
+.mic{width:86px;height:86px;border-radius:50%;border:none;background:var(--pri);color:#fff;display:grid;place-items:center;box-shadow:0 8px 24px rgba(79,70,229,.35);cursor:pointer;transition:transform .15s}
+.mic:active{transform:scale(.95)}
+.mic svg{width:36px;height:36px}
+.mic.rec{background:#e11d48;box-shadow:0 0 0 0 rgba(225,29,72,.5);animation:pulse 1.3s infinite}
+.mic.small{width:66px;height:66px}.mic.small svg{width:28px;height:28px}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(225,29,72,.45)}70%{box-shadow:0 0 0 18px rgba(225,29,72,0)}100%{box-shadow:0 0 0 0 rgba(225,29,72,0)}}
+.mic-status{margin-top:10px;color:var(--sub);font-size:13px;text-align:center}
+.type-box{width:100%;margin-top:6px}
+textarea,input[type=text],input[type=password],select{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;background:#fff;color:var(--ink)}
+textarea{resize:vertical}
+.type-box .send{margin-top:8px;float:right}
+.type-box::after{content:"";display:block;clear:both}
+/* flow blocks */
+.flow{border-radius:var(--r);padding:14px 16px;margin:10px 0}
+.flow.analyze{background:var(--ana)}
+.flow.report{background:var(--ok)}
+.flow.retry{background:var(--warm)}
+.flow h4{margin:0 0 8px;font-size:14px}
+.sent{display:flex;gap:8px;align-items:flex-start;margin:7px 0}
+.sent .lab{flex:none;width:52px;font-size:12px;color:var(--sub);padding-top:2px}
+.sent .txt{flex:1;font-size:16px}
+.sent .txt.orig{color:#7a3b3b}
+.say{flex:none;border:none;background:rgba(255,255,255,.75);border-radius:8px;width:32px;height:28px;cursor:pointer;font-size:15px}
+.ans.blur{filter:blur(6px);user-select:none;cursor:pointer}
+.pt{background:rgba(255,255,255,.7);border-radius:12px;padding:10px 12px;margin:8px 0}
+.pt .h{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px}
+.pt .wr{font-size:14px;margin:4px 0 2px}
+.pt .wr del{color:var(--badInk)} .pt .wr ins{color:var(--okInk);text-decoration:none;font-weight:600}
+.pt .ex{font-size:13px;color:#374151}
+.type-grammar{background:#fde7e7;color:#b42318}.type-vocabulary{background:#e7f0fe;color:#1d4ed8}
+.type-natural{background:#e6f6ee;color:#0f7a4f}.type-pronunciation{background:#fdf1df;color:#9a5b00}
+.score{font-size:28px;font-weight:800;color:var(--pri)}
+.verdict{border-radius:12px;padding:10px 12px;margin-top:10px;font-size:14px}
+.verdict.pass{background:var(--ok);color:var(--okInk)}
+.verdict.fail{background:var(--bad);color:var(--badInk)}
+.loading{display:flex;align-items:center;gap:10px;color:var(--sub);font-size:14px;padding:10px 4px}
+.spin{width:18px;height:18px;border:3px solid #d9dbf5;border-top-color:var(--pri);border-radius:50%;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* profile */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;text-align:center}
+.stat b{display:block;font-size:22px}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px}
+.bar .lbl{width:64px;flex:none}.bar .trk{flex:1;height:10px;background:#eef0f5;border-radius:6px;overflow:hidden}
+.bar .fill{height:100%;border-radius:6px}.bar .n{width:28px;text-align:right;color:var(--sub)}
+.weak{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.weak:last-child{border-bottom:none}
+.weak .cnt{flex:none;font-weight:700;color:var(--badInk)}
+.prog{font-size:12px;color:var(--okInk)}
+.item{padding:10px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+/* nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:var(--safeB)}
+nav.tabs button{flex:1;border:none;background:none;padding:8px 0 9px;font-size:11px;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;position:relative}
+nav.tabs button .i{font-size:20px;line-height:1.1}
+nav.tabs button.on{color:var(--pri);font-weight:600}
+.badge{position:absolute;top:4px;left:calc(50% + 6px);background:#e11d48;color:#fff;border-radius:999px;font-size:10px;min-width:16px;height:16px;line-height:16px;padding:0 4px}
+.toast{position:fixed;left:50%;bottom:calc(84px + var(--safeB));transform:translateX(-50%);background:rgba(31,35,48,.92);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;z-index:50;max-width:88vw;text-align:center}
+label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
+</style>
+</head>
+<body>
+<header class="top"><h1 id="title">🎙️ 口语教练</h1><span class="streak" id="streak"></span></header>
+
+<main>
+<!-- ============ 练习 ============ -->
+<section class="view on" id="v-practice">
+  <div class="chips" id="cats"></div>
+  <div class="card topic" id="topicCard">
+    <div class="muted">今天的话题</div>
+    <div class="q" id="topicQ">随便说一句英语，我来帮你纠错 👇</div>
+    <div class="muted" id="topicZh">比如：I very like this movie.</div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm" id="newTopic">🎲 换个话题</button>
+      <button class="btn sm hidden" id="sayTopic">🔊 听问题</button>
+    </div>
+  </div>
+  <div class="card" id="mainInput"></div>
+  <div id="result"></div>
+</section>
+
+<!-- ============ 复习 ============ -->
+<section class="view" id="v-review">
+  <div class="card">
+    <h3>主动复习</h3>
+    <div class="muted" id="revSummary"></div>
+  </div>
+  <div id="revArea"></div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><h3 style="margin:0">全部纠正过的句子</h3><span class="muted" id="allCount"></span></div>
+    <div id="allItems"></div>
+  </div>
+</section>
+
+<!-- ============ 档案 ============ -->
+<section class="view" id="v-profile">
+  <div class="stats" style="margin-top:12px">
+    <div class="stat"><b id="stSent">0</b><span class="muted">练习句数</span></div>
+    <div class="stat"><b id="stScore">-</b><span class="muted">近 20 句均分</span></div>
+    <div class="stat"><b id="stMaster">0</b><span class="muted">已掌握句子</span></div>
+  </div>
+  <div class="card"><h3>错误类型分布</h3><div id="typeBars"></div></div>
+  <div class="card"><h3>反复犯的错误</h3><div class="muted" style="margin-bottom:4px">次数 = 被纠正次数；绿色 = 复习时已改对的次数</div><div id="weakList"></div></div>
+  <div class="card">
+    <h3>AI 弱点诊断</h3>
+    <div class="muted">让 Gemini 根据你的错误档案，给出最该练的 3 个方向</div>
+    <button class="btn primary block" id="diagBtn" style="margin-top:10px">生成诊断</button>
+    <div id="diagOut"></div>
+  </div>
+</section>
+
+<!-- ============ 设置 ============ -->
+<section class="view" id="v-settings">
+  <div class="card">
+    <h3>Gemini API</h3>
+    <label class="f">API Key（只保存在这台手机的浏览器里）</label>
+    <div class="row" style="flex-wrap:nowrap"><input type="password" id="setKey" placeholder="AIza..." autocomplete="off"><button class="btn sm" id="toggleKey">显示</button></div>
+    <div class="muted" style="margin-top:6px">在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 免费申请</div>
+    <label class="f">模型</label>
+    <select id="setModel">
+      <option value="gemini-3.6-flash">gemini-3.6-flash（推荐，均衡）</option>
+      <option value="gemini-3.8-flash">gemini-3.8-flash（最聪明，稍慢）</option>
+      <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite（最快最省）</option>
+      <option value="custom">自定义…</option>
+    </select>
+    <input type="text" id="setModelCustom" class="hidden" placeholder="输入模型 ID" style="margin-top:8px">
+    <label class="f">API 地址（国内可填自己的反代地址，一般不用改）</label>
+    <input type="text" id="setBase" placeholder="https://generativelanguage.googleapis.com">
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="saveSet">保存</button><button class="btn" id="testSet">测试连接</button></div>
+  </div>
+  <div class="card">
+    <h3>学习偏好</h3>
+    <label class="f">我的水平</label>
+    <select id="setLevel"><option value="beginner">初级</option><option value="intermediate">中级</option><option value="advanced">高级</option></select>
+    <label class="f">朗读口音</label>
+    <select id="setAccent"><option value="en-US">美式 en-US</option><option value="en-GB">英式 en-GB</option></select>
+    <label class="f">朗读语速 <span id="rateV"></span></label>
+    <input type="range" id="setRate" min="0.6" max="1.2" step="0.05" style="width:100%">
+  </div>
+  <div class="card">
+    <h3>数据</h3>
+    <div class="muted">所有练习记录都只存在本机。换手机前先导出。</div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm" id="expBtn">导出备份</button>
+      <button class="btn sm" id="impBtn">导入备份</button>
+      <button class="btn sm" id="clrBtn" style="color:var(--badInk)">清空数据</button>
+      <input type="file" id="impFile" accept="application/json" class="hidden">
+    </div>
+  </div>
+</section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-v="practice" class="on"><span class="i">🎙️</span>练习</button>
+  <button data-v="review"><span class="i">🔁</span>复习<span class="badge hidden" id="dueBadge"></span></button>
+  <button data-v="profile"><span class="i">📒</span>错误档案</button>
+  <button data-v="settings"><span class="i">⚙️</span>设置</button>
+</nav>
+
+<script>
+/* =========================================================
+   基础工具
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('sc_'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('sc_'+k, JSON.stringify(v)); }catch(e){ toast('存储空间不足，建议导出后清理'); } }
+};
+const DAY = 86400000;
+const S = {
+  settings: Object.assign({key:'', model:'gemini-3.6-flash', base:'', level:'intermediate', accent:'en-US', rate:0.95}, LS.get('settings', {})),
+  items: LS.get('items', []),   // 纠正过的句子（复习用）
+  tags:  LS.get('tags', {}),    // 个人错误档案 {tag:{type,count,fixed,last,wrong,right,explain}}
+  log:   LS.get('log', []),     // 练习记录 [{t,score}]
+  topics: LS.get('topics', [])
+};
+function save(){ for(const k of ['settings','items','tags','log','topics']) LS.set(k, S[k]); refreshBadges(); }
+
+let toastT;
+function toast(msg, ms=2600){
+  let el = $('.toast'); if(!el){ el = document.createElement('div'); el.className='toast'; document.body.appendChild(el); }
+  el.textContent = msg; el.style.display='block'; clearTimeout(toastT); toastT = setTimeout(()=>el.style.display='none', ms);
+}
+const loadingHTML = t => `<div class="loading"><div class="spin"></div>${esc(t)}</div>`;
+const TYPE_NAME = {grammar:'语法', vocabulary:'词汇', natural:'地道表达', pronunciation:'发音'};
+const ICON_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+
+/* =========================================================
+   朗读 (TTS)
+   ========================================================= */
+function speak(text){
+  if(!('speechSynthesis' in window)){ toast('此浏览器不支持朗读'); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = S.settings.accent; u.rate = +S.settings.rate || 0.95;
+  const v = speechSynthesis.getVoices().filter(v => v.lang && v.lang.replace('_','-').startsWith(S.settings.accent));
+  if(v.length) u.voice = v.find(x => /natural|premium|enhanced|google/i.test(x.name)) || v[0];
+  speechSynthesis.speak(u);
+}
+if('speechSynthesis' in window) speechSynthesis.getVoices();
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-say]'); if(b){ speak(b.dataset.say); }
+  const a = e.target.closest('.ans.blur'); if(a){ a.classList.remove('blur'); }
+});
+
+/* =========================================================
+   录音：MediaRecorder → 16kHz 单声道 WAV（Gemini 兼容性最好）
+   ========================================================= */
+const Rec = {
+  active:false, owner:null, mr:null, stream:null, chunks:[], t0:0, timer:null,
+  async start(owner, onTick){
+    if(!navigator.mediaDevices?.getUserMedia) throw new Error('需要 HTTPS 网址才能使用麦克风');
+    this.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
+    const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus']
+      .find(t => window.MediaRecorder?.isTypeSupported?.(t));
+    this.mr = new MediaRecorder(this.stream, mime ? {mimeType:mime} : undefined);
+    this.chunks = []; this.mr.ondataavailable = e => e.data.size && this.chunks.push(e.data);
+    this.mr.start(250); this.active = true; this.owner = owner; this.t0 = Date.now();
+    this.timer = setInterval(() => { const s = Math.floor((Date.now()-this.t0)/1000); onTick(s); if(s >= 60) owner.click(); }, 250);
+  },
+  stop(){
+    return new Promise(res => {
+      clearInterval(this.timer);
+      const dur = (Date.now()-this.t0)/1000;
+      this.mr.onstop = () => {
+        this.stream.getTracks().forEach(t => t.stop());
+        this.active = false; this.owner = null;
+        res({blob:new Blob(this.chunks, {type:this.mr.mimeType || 'audio/webm'}), dur});
+      };
+      this.mr.stop();
+    });
+  }
+};
+async function toWav16k(blob){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  const ab = await blob.arrayBuffer();
+  const audio = await new Promise((ok, no) => { const p = ac.decodeAudioData(ab, ok, no); if(p && p.catch) p.catch(no); });
+  try{ ac.close(); }catch(e){}
+  const sr = 16000, len = Math.max(1, Math.ceil(audio.duration * sr));
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const oac = new OAC(1, len, sr);
+  const src = oac.createBufferSource(); src.buffer = audio; src.connect(oac.destination); src.start(0);
+  const out = await oac.startRendering();
+  const d = out.getChannelData(0), buf = new ArrayBuffer(44 + d.length*2), v = new DataView(buf);
+  const w = (o, s) => { for(let i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); };
+  w(0,'RIFF'); v.setUint32(4, 36 + d.length*2, true); w(8,'WAVE'); w(12,'fmt ');
+  v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true); v.setUint32(24,sr,true);
+  v.setUint32(28,sr*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,'data'); v.setUint32(40,d.length*2,true);
+  for(let i=0;i<d.length;i++){ const s = Math.max(-1, Math.min(1, d[i])); v.setInt16(44+i*2, s < 0 ? s*0x8000 : s*0x7fff, true); }
+  return new Blob([buf], {type:'audio/wav'});
+}
+const blobToB64 = blob => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(blob); });
+
+async function buildParts(input, label){
+  if(input.text) return [{text: `${label}（文字输入）：\n${input.text}`}];
+  let blob = input.blob;
+  try{ blob = await toWav16k(blob); }catch(e){ /* 转换失败就发原始音频 */ }
+  return [{text: `${label}（录音）：`}, {inlineData:{mimeType: blob.type.split(';')[0] || 'audio/webm', data: await blobToB64(blob)}}];
+}
+
+/* =========================================================
+   Gemini 调用
+   ========================================================= */
+async function gemini({system, parts, schema, temperature=0.4}){
+  const {key, model} = S.settings;
+  if(!key){ switchView('settings'); throw new Error('请先在「设置」里填写 Gemini API Key'); }
+  const base = (S.settings.base || 'https://generativelanguage.googleapis.com').replace(/\/+$/,'');
+  const body = {
+    systemInstruction:{parts:[{text:system}]},
+    contents:[{role:'user', parts}],
+    generationConfig:{temperature, responseMimeType:'application/json', ...(schema ? {responseSchema:schema} : {})}
+  };
+  const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 90000);
+  let res;
+  try{
+    res = await fetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method:'POST', headers:{'Content-Type':'application/json','x-goog-api-key':key}, body:JSON.stringify(body), signal:ctrl.signal});
+  }catch(e){
+    throw new Error(e.name === 'AbortError' ? '请求超时，请检查网络后重试' : '连不上 Gemini。国内网络需要开代理，或在设置里填反代地址');
+  }finally{ clearTimeout(to); }
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok){
+    const m = data.error?.message || res.statusText;
+    if(res.status === 400 && /API key/i.test(m)) throw new Error('API Key 无效，请到设置里检查');
+    if(res.status === 429) throw new Error('请求太频繁或额度用完了，稍等再试');
+    throw new Error(`Gemini 出错 (${res.status})：${m}`);
+  }
+  const cand = data.candidates?.[0];
+  const text = (cand?.content?.parts || []).filter(p => p.text && !p.thought).map(p => p.text).join('');
+  if(!text) throw new Error('Gemini 没有返回内容' + (cand?.finishReason ? `（${cand.finishReason}）` : ''));
+  try{ return JSON.parse(text); }catch(e){ const m = text.match(/\{[\s\S]*\}/); if(m) return JSON.parse(m[0]); throw new Error('结果解析失败，请重试'); }
+}
+
+const STR = {type:'STRING'}, BOOL = {type:'BOOLEAN'}, INT = {type:'INTEGER'}, STRS = {type:'ARRAY', items:{type:'STRING'}};
+const SCHEMA_ANALYZE = {type:'OBJECT', properties:{
+  understood:BOOL, transcript:STR, cue_zh:STR, is_correct:BOOL, corrected:STR, natural:STR,
+  points:{type:'ARRAY', items:{type:'OBJECT', properties:{
+    type:{type:'STRING', enum:['grammar','vocabulary','natural','pronunciation']}, tag:STR, wrong:STR, right:STR, explain:STR},
+    required:['type','tag','wrong','right','explain']}},
+  pronunciation:STR, score:INT, encouragement:STR},
+  required:['understood','transcript','cue_zh','is_correct','corrected','natural','points','pronunciation','score','encouragement']};
+const SCHEMA_CHECK = {type:'OBJECT', properties:{understood:BOOL, transcript:STR, passed:BOOL, fixed_tags:STRS, missed_tags:STRS, feedback:STR},
+  required:['understood','transcript','passed','fixed_tags','missed_tags','feedback']};
+const SCHEMA_TOPIC = {type:'OBJECT', properties:{question_en:STR, question_zh:STR, hint:STR}, required:['question_en','question_zh','hint']};
+const SCHEMA_DIAG = {type:'OBJECT', properties:{summary:STR, focus:{type:'ARRAY', items:{type:'OBJECT', properties:{title:STR, tip:STR, examples:STRS}, required:['title','tip','examples']}}}, required:['summary','focus']};
+
+const LEVEL_NAME = {beginner:'初级', intermediate:'中级', advanced:'高级'};
+function knownTags(){
+  return Object.entries(S.tags).sort((a,b) => b[1].count - a[1].count).slice(0, 40).map(([t]) => t);
+}
+function sysAnalyze(){
+  const tags = knownTags();
+  return `你是一位耐心、专业的英语口语教练，学生是中文母语者（${LEVEL_NAME[S.settings.level]}水平）。学生会发来他说的一句或几句英语（录音或文字）。${topic.en ? `\n当前练习话题：${topic.en}` : ''}
+请按要求输出 JSON：
+- understood：听不清、没有英语内容时为 false（其余字段给空值）。
+- transcript：逐字转写学生实际说的话，保留所有错误，绝对不要帮他改。
+- cue_zh：用一句中文写出学生想表达的意思（之后复习时用来提示他）。
+- is_correct：语法和用词是否完全正确。
+- corrected：在原句基础上做最小改动得到的正确句子；原句正确就原样给出。
+- natural：母语者日常口语中最自然的说法（可与 corrected 相同）。
+- points：最重要的知识点，最多 4 条。type 取 grammar(语法错误)/vocabulary(把简单词换成更自然的词)/natural(更地道的表达方式)/pronunciation(发音)。
+  tag 是简短、可复用的错误类别名（中文，≤12字），例如“very不能修饰动词”“第三人称单数”“冠词缺失”“过去时”。
+  ${tags.length ? `学生历史错误类别：${tags.join('、')}。若本次错误属于其中之一，必须原样复用该 tag。` : ''}
+  wrong=原文片段，right=改正片段，explain=中文解释（≤40字，讲清为什么）。原句完全正确且很地道时 points 为空数组。
+- pronunciation：仅当输入是录音且有明显发音问题时，用中文具体指出哪个词、怎么读；否则空字符串。
+- score：0-100 综合分（准确 50% + 地道 30% + 流利 20%）。
+- encouragement：一句中文鼓励，具体说出做得好的地方。`;
+}
+function sysCheck(it){
+  return `你是英语口语教练，正在检查学生是否真正掌握了之前纠正过的内容（不是只看懂答案）。
+学生要表达的意思：${it.cue_zh}
+参考正确说法：${it.corrected}
+参考地道说法：${it.natural}
+需要掌握的知识点：${it.points.map(p => `[${p.tag}] ${p.wrong} → ${p.right}`).join('；') || '无'}
+学生现在重新说了一遍（录音或文字）。输出 JSON：
+- understood：听不清或没有英语时为 false。
+- transcript：逐字转写，不要改正。
+- passed：句子语法正确、意思对，并且没有再犯上述知识点的错误，就算通过。不要求和参考答案逐字一致，同义的正确说法也算；可忽略轻微口误。
+- fixed_tags：这次处理对了的知识点 tag；missed_tags：仍然犯错的 tag。
+- feedback：中文反馈（≤60字）。没通过时只给提示，不要直接说出完整答案。`;
+}
+
+/* =========================================================
+   通用输入组件：麦克风 + 打字
+   ========================================================= */
+let busy = false;
+function mountInput(box, onSubmit, {hint='点一下开始说，说完再点一下', small=false} = {}){
+  box.innerHTML = `<div class="mic-wrap">
+    <button class="mic ${small ? 'small' : ''}" type="button" aria-label="录音">${ICON_MIC}</button>
+    <div class="mic-status">${esc(hint)}</div>
+    <button class="link tgl" type="button">⌨️ 改用打字</button>
+    <div class="type-box hidden"><textarea rows="2" placeholder="Type your English here…"></textarea><button class="btn primary sm send" type="button">提交</button></div>
+  </div>`;
+  const mic = box.querySelector('.mic'), st = box.querySelector('.mic-status'), tb = box.querySelector('.type-box'), ta = box.querySelector('textarea');
+  mic.onclick = async () => {
+    if(busy) return;
+    if(Rec.active){
+      if(Rec.owner !== mic) return toast('另一个录音正在进行');
+      mic.classList.remove('rec'); st.textContent = hint;
+      const {blob, dur} = await Rec.stop();
+      if(dur < 0.7) return toast('太短了，再说一次吧');
+      onSubmit({blob});
+    }else{
+      try{
+        speechSynthesis?.cancel?.();
+        await Rec.start(mic, s => st.textContent = `● 录音中 ${s}s · 说完点一下结束`);
+        mic.classList.add('rec'); st.textContent = '● 录音中 0s · 说完点一下结束';
+      }catch(e){
+        toast(e.name === 'NotAllowedError' ? '麦克风权限被拒绝，请在浏览器设置里允许' : '无法使用麦克风：' + e.message, 4000);
+        tb.classList.remove('hidden');
+      }
+    }
+  };
+  box.querySelector('.tgl').onclick = () => { tb.classList.toggle('hidden'); if(!tb.classList.contains('hidden')) ta.focus(); };
+  box.querySelector('.send').onclick = () => { const t = ta.value.trim(); if(!t || busy) return; ta.value=''; onSubmit({text:t}); };
+}
+
+/* =========================================================
+   练习页：说 → 分析 → 报告 → 重说一遍
+   ========================================================= */
+const CATS = ['随便聊','日常生活','工作职场','旅行出行','电影音乐','美食餐厅','面试','观点表达'];
+let cat = LS.get('cat', '随便聊'), topic = LS.get('topic', {});
+function renderCats(){
+  $('#cats').innerHTML = CATS.map(c => `<button class="chip ${c===cat?'on':''}" data-c="${c}">${c}</button>`).join('');
+}
+$('#cats').onclick = e => { const b = e.target.closest('.chip'); if(!b) return; cat = b.dataset.c; LS.set('cat', cat); renderCats(); newTopic(); };
+function renderTopic(){
+  if(topic.en){ $('#topicQ').textContent = topic.en; $('#topicZh').textContent = `${topic.zh}　💡 ${topic.hint}`; $('#sayTopic').classList.remove('hidden'); $('#sayTopic').dataset.say = topic.en; }
+}
+async function newTopic(){
+  const btn = $('#newTopic'); btn.disabled = true; btn.textContent = '出题中…';
+  try{
+    const r = await gemini({temperature:1, schema:SCHEMA_TOPIC,
+      system:`你给中文母语的英语学习者（${LEVEL_NAME[S.settings.level]}）出口语练习题。类别：${cat}。出一个开放式、能用 1-3 句话回答的英语问题。question_zh 是中文翻译，hint 是 2-3 个可以用上的英语短语（用 / 分隔）。避免与这些重复：${S.topics.slice(-8).join(' | ') || '无'}`,
+      parts:[{text:'请出一道题'}]});
+    topic = {en:r.question_en, zh:r.question_zh, hint:r.hint}; LS.set('topic', topic);
+    S.topics.push(r.question_en); S.topics = S.topics.slice(-30); save(); renderTopic();
+  }catch(e){ toast(e.message, 4000); }
+  btn.disabled = false; btn.textContent = '🎲 换个话题';
+}
+$('#newTopic').onclick = newTopic;
+
+let cur = null; // 当前这句话的分析结果
+async function handleFirst(input){
+  busy = true;
+  const res = $('#result');
+  const audioUrl = input.blob ? URL.createObjectURL(input.blob) : null;
+  res.innerHTML = `<div class="flow analyze"><h4>🧠 语音识别 + AI 分析</h4>${loadingHTML('正在识别语法、词汇、表达习惯…')}</div>`;
+  res.scrollIntoView({behavior:'smooth', block:'start'});
+  try{
+    const r = await gemini({system:sysAnalyze(), parts: await buildParts(input, '学生说'), schema:SCHEMA_ANALYZE});
+    if(!r.understood || !r.transcript){ res.innerHTML = `<div class="verdict fail">没听清你说的英语，靠近一点再说一次吧～</div>`; busy=false; return; }
+    r.points = (r.points || []).filter(p => p.tag);
+    cur = {...r, audioUrl, id: Date.now().toString(36)};
+    recordAnalysis(cur);
+    renderReport();
+  }catch(e){
+    res.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`;
+  }
+  busy = false;
+}
+function sentRow(lab, txt, cls=''){
+  return `<div class="sent"><span class="lab">${lab}</span><span class="txt ${cls}">${esc(txt)}</span><button class="say" data-say="${esc(txt)}" aria-label="朗读">🔊</button></div>`;
+}
+function pointsHTML(points){
+  return points.map(p => `<div class="pt"><div class="h"><span class="tag type-${p.type}">${TYPE_NAME[p.type] || p.type}</span><b>${esc(p.tag)}</b></div>
+    <div class="wr"><del>${esc(p.wrong)}</del> → <ins>${esc(p.right)}</ins></div><div class="ex">${esc(p.explain)}</div></div>`).join('');
+}
+function renderReport(){
+  const r = cur, needRetry = r.points.length > 0 || norm(r.natural) !== norm(r.transcript);
+  $('#result').innerHTML = `
+  <div class="flow analyze">
+    <div class="row" style="justify-content:space-between"><h4 style="margin:0">🧠 AI 分析</h4><span class="score">${r.score}<span class="muted" style="font-size:13px"> 分</span></span></div>
+    <div class="muted" style="margin-top:4px">${esc(r.encouragement)}</div>
+    ${r.audioUrl ? `<button class="btn sm" style="margin-top:8px" id="playMine">▶ 听我的录音</button>` : ''}
+  </div>
+  <div class="flow report" id="reportBox">
+    <h4>📋 纠错报告</h4>
+    ${sentRow('原句', r.transcript, 'orig')}
+    <div class="ans">${sentRow(r.is_correct ? '✅ 正确' : '正确', r.corrected)}</div>
+    <div class="ans">${sentRow('更地道', r.natural)}</div>
+    ${r.points.length ? `<div style="margin-top:8px"><b style="font-size:13px">知识点</b>${pointsHTML(r.points)}</div>` : `<div class="verdict pass">完全正确，而且很地道！👏</div>`}
+    ${r.pronunciation ? `<div class="pt"><div class="h"><span class="tag type-pronunciation">发音</span></div><div class="ex">${esc(r.pronunciation)}</div></div>` : ''}
+  </div>
+  ${needRetry ? `<div class="flow retry" id="retryBox">
+    <h4>🔁 让我重新说一遍</h4>
+    <div class="muted">检测你是否真正掌握，而不是只看懂答案。准备好后，答案会被遮住。</div>
+    <div style="margin-top:6px">${r.points.map(p => `<span class="tag">${esc(p.tag)}</span>`).join('')}</div>
+    <button class="btn primary block" id="startRetry" style="margin-top:10px">我记住了，遮住答案开始</button>
+    <div id="retryInput"></div><div id="retryOut"></div>
+  </div>` : `<button class="btn block" onclick="scrollTo({top:0,behavior:'smooth'})">再说一句 ↑</button>`}`;
+  $('#playMine')?.addEventListener('click', () => new Audio(r.audioUrl).play());
+  $('#startRetry')?.addEventListener('click', () => {
+    document.querySelectorAll('#reportBox .ans').forEach(a => a.classList.add('blur'));
+    $('#startRetry').remove();
+    $('#retryInput').innerHTML = `<div class="pt" style="margin-top:10px"><div class="muted">用英语表达：</div><div style="font-size:16px;font-weight:600">${esc(r.cue_zh)}</div></div><div id="retryMic"></div>`;
+    mountInput($('#retryMic'), handleRetry, {small:true, hint:'点一下，用正确的方式再说一遍'});
+  });
+}
+const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9' ]/g,'').replace(/\s+/g,' ').trim();
+
+async function handleRetry(input){
+  const out = $('#retryOut'); busy = true;
+  out.innerHTML = loadingHTML('正在检查你是否掌握…');
+  try{
+    const item = S.items.find(i => i.id === cur.id) ||
+      {cue_zh:cur.cue_zh, corrected:cur.corrected, natural:cur.natural, points:cur.points, level:0, tries:0, passes:0, _tmp:true};
+    const c = await gemini({system:sysCheck(item), parts: await buildParts(input, '学生重新说'), schema:SCHEMA_CHECK, temperature:0.2});
+    applyCheck(item, c);
+    out.innerHTML = verdictHTML(c) + (c.passed
+      ? `<button class="btn block" style="margin-top:10px" onclick="scrollTo({top:0,behavior:'smooth'})">再说一句新的 ↑</button>`
+      : `<div class="muted" style="margin-top:6px">再试一次，或点上面模糊的答案偷看一下</div>`);
+    if(c.passed) document.querySelectorAll('#reportBox .ans').forEach(a => a.classList.remove('blur'));
+  }catch(e){ out.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`; }
+  busy = false;
+}
+function verdictHTML(c){
+  if(!c.understood) return `<div class="verdict fail">没听清，再说一次吧～</div>`;
+  return `<div class="verdict ${c.passed ? 'pass' : 'fail'}">
+    <div><b>${c.passed ? '✅ 掌握了！' : '❌ 还差一点'}</b></div>
+    <div style="margin:4px 0;color:var(--ink)">你说的：${esc(c.transcript)}</div>
+    <div>${esc(c.feedback)}</div></div>`;
+}
+
+/* =========================================================
+   错误档案 & 间隔复习
+   ========================================================= */
+const INTERVALS = [0, 1, 3, 7, 15, 30]; // 天
+function recordAnalysis(r){
+  const now = Date.now();
+  S.log.push({t:now, score:r.score}); S.log = S.log.slice(-2000);
+  for(const p of r.points){
+    const t = S.tags[p.tag] || (S.tags[p.tag] = {type:p.type, count:0, fixed:0});
+    t.count++; t.last = now; t.type = p.type; t.wrong = p.wrong; t.right = p.right; t.explain = p.explain;
+  }
+  if(r.points.length){
+    S.items.unshift({id:r.id, cue_zh:r.cue_zh, original:r.transcript, corrected:r.corrected, natural:r.natural,
+      points:r.points.map(({type,tag,wrong,right,explain}) => ({type,tag,wrong,right,explain})),
+      created:now, level:0, due:now, tries:0, passes:0});
+  }
+  save(); renderHeader();
+}
+function applyCheck(item, c){
+  if(!item || item._tmp || !c.understood) return;
+  const now = Date.now();
+  item.tries++;
+  if(c.passed){
+    item.passes++; item.level = Math.min(item.level + 1, INTERVALS.length - 1);
+    item.due = now + INTERVALS[item.level] * DAY;
+  }else{
+    item.level = Math.max(0, item.level - 1); item.due = now;
+  }
+  item.lastTry = now;
+  for(const t of c.fixed_tags || []) if(S.tags[t]) S.tags[t].fixed++;
+  save();
+}
+const dueItems = () => S.items.filter(i => i.due <= Date.now());
+function refreshBadges(){
+  const n = dueItems().length, b = $('#dueBadge');
+  b.textContent = n > 99 ? '99+' : n; b.classList.toggle('hidden', !n);
+}
+
+let revItem = null;
+function renderReview(){
+  const due = dueItems();
+  $('#revSummary').textContent = S.items.length
+    ? (due.length ? `有 ${due.length} 句需要复习。看中文意思，用英语说出来——系统会检查你有没有再犯同样的错。` : '今天的复习都完成了 🎉 下次到期会提醒你。')
+    : '还没有纠正过的句子。去「练习」说几句吧！';
+  if(!revItem || !due.includes(revItem)) revItem = due[0] || null;
+  const area = $('#revArea');
+  if(revItem){
+    const it = revItem;
+    area.innerHTML = `<div class="flow retry">
+      <div class="row" style="justify-content:space-between"><span class="muted">第 ${due.indexOf(it)+1} / ${due.length} 句 · 熟练度 ${'●'.repeat(it.level)}${'○'.repeat(INTERVALS.length-1-it.level)}</span><button class="link" id="skipRev">跳过</button></div>
+      <div style="font-size:17px;font-weight:650;margin:8px 0">${esc(it.cue_zh)}</div>
+      <div>${it.points.map(p => `<span class="tag">${esc(p.tag)}</span>`).join('')}</div>
+      <div id="revMic"></div><div id="revOut"></div>
+      <div class="ans blur" style="margin-top:10px">${sentRow('正确', it.corrected)}${sentRow('更地道', it.natural)}</div>
+      <div class="muted" style="text-align:center">↑ 点模糊处偷看答案</div>
+    </div>`;
+    mountInput($('#revMic'), handleReview, {small:true, hint:'点一下，用英语说出上面的意思'});
+    $('#skipRev').onclick = () => { const d = dueItems(); revItem = d[(d.indexOf(it)+1) % d.length]; renderReview(); };
+  }else area.innerHTML = '';
+  // 全部句子
+  $('#allCount').textContent = `${S.items.length} 句`;
+  $('#allItems').innerHTML = S.items.slice(0, 200).map(i => `<div class="item">
+    <div class="muted">${esc(i.cue_zh)}</div>
+    <div style="color:#7a3b3b;text-decoration:line-through;font-size:14px">${esc(i.original)}</div>
+    <div class="row" style="justify-content:space-between;flex-wrap:nowrap"><b style="font-size:15px">${esc(i.natural)}</b><button class="say" data-say="${esc(i.natural)}">🔊</button></div>
+    <div class="row" style="justify-content:space-between"><span class="prog">熟练度 ${i.level}/${INTERVALS.length-1} · ${i.due <= Date.now() ? '待复习' : '下次 ' + new Date(i.due).toLocaleDateString()}</span><button class="link" data-del="${i.id}" style="color:var(--sub)">删除</button></div>
+  </div>`).join('') || '<div class="muted">暂无</div>';
+}
+$('#allItems').onclick = e => {
+  const b = e.target.closest('[data-del]'); if(!b) return;
+  if(!confirm('删除这句？')) return;
+  S.items = S.items.filter(i => i.id !== b.dataset.del); save(); renderReview();
+};
+async function handleReview(input){
+  const it = revItem, out = $('#revOut'); busy = true;
+  out.innerHTML = loadingHTML('正在检查…');
+  try{
+    const c = await gemini({system:sysCheck(it), parts: await buildParts(input, '学生说'), schema:SCHEMA_CHECK, temperature:0.2});
+    applyCheck(it, c);
+    out.innerHTML = verdictHTML(c) + `<button class="btn ${c.passed ? 'primary' : ''} block" id="nextRev" style="margin-top:10px">${c.passed ? '下一句 →' : '先跳过，稍后再练'}</button>`;
+    if(c.passed) out.parentElement.querySelector('.ans')?.classList.remove('blur');
+    $('#nextRev').onclick = () => { revItem = null; if(!c.passed){ const d = dueItems(); revItem = d[(d.indexOf(it)+1) % d.length] || null; } renderReview(); };
+  }catch(e){ out.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`; }
+  busy = false;
+}
+
+function renderProfile(){
+  const recent = S.log.slice(-20);
+  $('#stSent').textContent = S.log.length;
+  $('#stScore').textContent = recent.length ? Math.round(recent.reduce((a,b) => a + b.score, 0) / recent.length) : '-';
+  $('#stMaster').textContent = S.items.filter(i => i.level >= 3).length;
+  const byType = {grammar:0, vocabulary:0, natural:0, pronunciation:0};
+  for(const t of Object.values(S.tags)) byType[t.type] = (byType[t.type] || 0) + t.count;
+  const max = Math.max(1, ...Object.values(byType));
+  const col = {grammar:'#ef4444', vocabulary:'#3b82f6', natural:'#10b981', pronunciation:'#f59e0b'};
+  $('#typeBars').innerHTML = Object.entries(byType).map(([k,n]) => `<div class="bar"><span class="lbl">${TYPE_NAME[k]}</span><div class="trk"><div class="fill" style="width:${n/max*100}%;background:${col[k]}"></div></div><span class="n">${n}</span></div>`).join('');
+  const list = Object.entries(S.tags).sort((a,b) => b[1].count - a[1].count).slice(0, 30);
+  $('#weakList').innerHTML = list.map(([tag,t]) => `<div class="weak"><div>
+      <div><span class="tag type-${t.type}">${TYPE_NAME[t.type] || ''}</span><b>${esc(tag)}</b></div>
+      <div style="font-size:13px;margin-top:2px"><del style="color:var(--badInk)">${esc(t.wrong)}</del> → <span style="color:var(--okInk)">${esc(t.right)}</span></div>
+      <div class="muted">${esc(t.explain)}</div></div>
+      <div style="text-align:right"><div class="cnt">×${t.count}</div><div class="prog">✓${t.fixed}</div></div></div>`).join('') || '<div class="muted">还没有记录</div>';
+}
+$('#diagBtn').onclick = async () => {
+  const tags = Object.entries(S.tags).sort((a,b) => b[1].count - a[1].count).slice(0, 30);
+  if(!tags.length) return toast('先练几句，积累一些数据吧');
+  const out = $('#diagOut'), btn = $('#diagBtn'); btn.disabled = true; out.innerHTML = loadingHTML('Gemini 正在分析你的错误档案…');
+  try{
+    const r = await gemini({schema:SCHEMA_DIAG, temperature:0.5,
+      system:'你是英语口语教练。根据学生的错误档案，用中文写一段 2-3 句的总体诊断（summary），再给出最该优先练的 3 个方向（focus），每个方向给一句具体练习方法（tip）和 3 个可以大声跟读的英语例句（examples）。',
+      parts:[{text: tags.map(([k,t]) => `${k}（${TYPE_NAME[t.type]}）被纠正${t.count}次，复习改对${t.fixed}次，例：${t.wrong} → ${t.right}`).join('\n')}]});
+    out.innerHTML = `<div class="flow analyze" style="margin-top:12px">${esc(r.summary)}</div>` + r.focus.map((f,i) => `<div class="pt" style="background:#f8f8fc"><b>${i+1}. ${esc(f.title)}</b><div class="ex">${esc(f.tip)}</div>${f.examples.map(x => sentRow('跟读', x)).join('')}</div>`).join('');
+  }catch(e){ out.innerHTML = `<div class="verdict fail">${esc(e.message)}</div>`; }
+  btn.disabled = false;
+};
+
+/* =========================================================
+   设置
+   ========================================================= */
+const PRESET = ['gemini-3.6-flash','gemini-3.8-flash','gemini-3.5-flash-lite'];
+function renderSettings(){
+  const s = S.settings;
+  $('#setKey').value = s.key; $('#setBase').value = s.base;
+  const isPreset = PRESET.includes(s.model);
+  $('#setModel').value = isPreset ? s.model : 'custom';
+  $('#setModelCustom').classList.toggle('hidden', isPreset); $('#setModelCustom').value = isPreset ? '' : s.model;
+  $('#setLevel').value = s.level; $('#setAccent').value = s.accent; $('#setRate').value = s.rate; $('#rateV').textContent = s.rate + 'x';
+}
+$('#setModel').onchange = e => $('#setModelCustom').classList.toggle('hidden', e.target.value !== 'custom');
+$('#toggleKey').onclick = () => { const k = $('#setKey'); k.type = k.type === 'password' ? 'text' : 'password'; $('#toggleKey').textContent = k.type === 'password' ? '显示' : '隐藏'; };
+function collectSettings(){
+  const m = $('#setModel').value;
+  Object.assign(S.settings, {key:$('#setKey').value.trim(), base:$('#setBase').value.trim(),
+    model: m === 'custom' ? ($('#setModelCustom').value.trim() || 'gemini-3.6-flash') : m});
+  save();
+}
+$('#saveSet').onclick = () => { collectSettings(); toast('已保存 ✓'); };
+$('#testSet').onclick = async () => {
+  collectSettings(); const b = $('#testSet'); b.disabled = true; b.textContent = '测试中…';
+  try{
+    const r = await gemini({schema:{type:'OBJECT', properties:{reply:STR}, required:['reply']}, system:'Reply in JSON.', parts:[{text:'Say "OK" in the reply field.'}]});
+    toast(`✅ 连接成功（${S.settings.model}）：${r.reply}`);
+  }catch(e){ toast(e.message, 5000); }
+  b.disabled = false; b.textContent = '测试连接';
+};
+for(const [id,k] of [['setLevel','level'],['setAccent','accent']]) $('#'+id).onchange = e => { S.settings[k] = e.target.value; save(); };
+$('#setRate').oninput = e => { S.settings.rate = +e.target.value; $('#rateV').textContent = e.target.value + 'x'; save(); };
+$('#expBtn').onclick = () => {
+  const data = JSON.stringify({v:1, items:S.items, tags:S.tags, log:S.log}, null, 1);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+  a.download = `口语教练备份-${new Date().toISOString().slice(0,10)}.json`; a.click();
+};
+$('#impBtn').onclick = () => $('#impFile').click();
+$('#impFile').onchange = async e => {
+  try{
+    const d = JSON.parse(await e.target.files[0].text());
+    if(!Array.isArray(d.items)) throw 0;
+    S.items = d.items; S.tags = d.tags || {}; S.log = d.log || []; save(); renderHeader(); toast('导入成功');
+  }catch(err){ toast('文件格式不对'); }
+  e.target.value = '';
+};
+$('#clrBtn').onclick = () => {
+  if(!confirm('确定清空所有练习记录和错误档案？（API Key 会保留）此操作无法撤销。')) return;
+  S.items = []; S.tags = {}; S.log = []; save(); renderHeader(); toast('已清空');
+};
+
+/* =========================================================
+   导航 & 启动
+   ========================================================= */
+function switchView(v){
+  document.querySelectorAll('.view').forEach(x => x.classList.toggle('on', x.id === 'v-'+v));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  if(v === 'review') renderReview();
+  if(v === 'profile') renderProfile();
+  if(v === 'settings') renderSettings();
+  scrollTo({top:0});
+}
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if(b) switchView(b.dataset.v); };
+function renderHeader(){
+  const days = new Set(S.log.map(l => new Date(l.t).toDateString()));
+  let n = 0, d = new Date(); if(!days.has(d.toDateString())) d = new Date(Date.now() - DAY);
+  while(days.has(d.toDateString())){ n++; d = new Date(d.getTime() - DAY); }
+  const today = S.log.filter(l => new Date(l.t).toDateString() === new Date().toDateString()).length;
+  $('#streak').textContent = (n ? `🔥 连续 ${n} 天 · ` : '') + `今天 ${today} 句`;
+}
+
+renderCats(); renderTopic(); renderHeader(); refreshBadges();
+mountInput($('#mainInput'), handleFirst);
+if(!S.settings.key){ switchView('settings'); setTimeout(() => toast('第一次使用：先填 Gemini API Key 吧', 4000), 300); }
+if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
