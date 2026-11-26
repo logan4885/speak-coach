@@ -321,6 +321,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
   <div class="card">
     <h3>数据</h3>
     <div class="muted">所有练习记录都只存在本机。换手机前先导出。</div>
+    <div class="muted" style="margin-top:6px">当前版本：<b id="appVer"></b></div>
     <div class="row" style="margin-top:10px">
       <button class="btn sm" id="expBtn">导出备份</button>
       <button class="btn sm" id="impBtn">导入备份</button>
@@ -340,6 +341,7 @@ label.f{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
 </nav>
 
 <script>
+const APP_VERSION = '2026-11-26 · 翻译版';
 /* =========================================================
    基础工具
    ========================================================= */
@@ -1546,11 +1548,18 @@ function renderHeader(){
 }
 
 renderCats(); renderTopic(); renderHeader(); refreshBadges();
+$('#appVer').textContent = APP_VERSION;
 mountInput($('#mainInput'), handleFirst);
 { const m0 = LS.get('mode','free'); if(m0 !== 'free') document.querySelector(`#modeSeg [data-m=${m0}]`)?.click(); }
 mountInput($('#chatInput'), handleChatTurn, {small:true, hint:'点一下说英语，说完再点一下'});
 if(!activeKey()){ switchView('settings'); setTimeout(() => toast('第一次使用：先选 AI 服务商并填 API Key 吧', 4000), 300); }
-if('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator && location.protocol === 'https:'){
+  const hadCtrl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js', {updateViaCache:'none'}).then(r => r.update()).catch(()=>{});
+  // 有新版本接管时自动刷新一次，不用手动关掉重开
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if(hadCtrl && !reloaded){ reloaded = true; location.reload(); } });
+}
 </script>
 </body>
 </html>
